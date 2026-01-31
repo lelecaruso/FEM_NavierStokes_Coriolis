@@ -34,5 +34,3 @@ From the project root directory, execute the following commands in your terminal
     Bash
 
     make
-
-    ./test_coriolis sphere/cube -n
