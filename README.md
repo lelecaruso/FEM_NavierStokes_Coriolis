@@ -35,14 +35,4 @@ From the project root directory, execute the following commands in your terminal
 
     make
 
-Project Structure
-
-.
-├── CMakeLists.txt       # Main CMake build configuration
-├── src/                 # Source code files (.cpp)
-├── include/             # Header files (.h / .hpp)
-├── shaders/             # GLSL Shaders for GPU rendering
-├── extern/              # External dependencies and libraries
-├── utils/               # Utility scripts and helper functions
-├── configure.sh         # Script to automate CMake configuration
-└── make.sh              # Script to automate the build process
+    ./test_coriolis sphere/cube -n
