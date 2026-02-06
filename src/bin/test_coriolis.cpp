@@ -38,7 +38,7 @@ bool reset     = false;
 /* Parameters */
 float  lognu       = -3.7;
 float  dt          = 0.002;
-float  denominator = 10.0f;  // NEW denominator for RELEVANT angular velocity
+float  denominator = 20.0f;  // NEW denominator for RELEVANT angular velocity
 double tol         = 1e-6;
 
 /* RHS expression of the PDE */
