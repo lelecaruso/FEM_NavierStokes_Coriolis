@@ -38,7 +38,7 @@ bool reset     = false;
 /* Parameters */
 float  lognu       = -3.7;
 float  dt          = 0.002;
-float  denominator = 1;  // denominator for angular velocity
+float  denominator = 10.0f;  // NEW denominator for RELEVANT angular velocity
 double tol         = 1e-6;
 
 /* RHS expression of the PDE */
@@ -538,7 +538,12 @@ static void update_all(NavierStokesSolver& solver, Mesh& mesh, GPUMesh& gpu_mesh
   {
     // Calculate omega as 10^-denominator.
     // If denominator = 4.13, we obtain the actual Earth angular velocity (~7.29e-5 rad/s).
-    float omega_value = 1.0f / pow(10.0f, denominator);
+
+    // OLD: float omega_value = 1.0f / pow(10.0f, denominator);
+    // NEW: Use the denominator directly as a linear scaling factor
+    float omega_value = denominator;
+
+    solver.time_step_coriolis(dt, pow(10, lognu), (double) omega_value);
 
     solver.time_step_coriolis(dt, pow(10, lognu), (double) omega_value);
 
@@ -689,16 +694,14 @@ static void draw_gui(NavierStokesSolver& solver)
   ImGui::SliderFloat("nu", &lognu, -8, 0, "10^(%.1f)");
 
   // --- OMEGA SLIDER SETUP ---
-  // A range from 0 to 6 provides optimal control:
-  // 0    = Fast rotation (1 rad/s)
-  // 4.13 = Real Earth rotation (~7.29e-5 rad/s)
-  // 6    = Nearly imperceptible rotation
-  ImGui::Text("Angular velocity (10^-n rad/s):");
-  ImGui::SliderFloat("omega exponent", &denominator, 0.0f, 6.0f, "n = %.1f");
+  // Inside draw_gui(...)
+  ImGui::Text("Coriolis Parameter (Omega):");
+  // Change range to 0.0 - 100.0 to allow for physically relevant scaling
+  ImGui::SliderFloat("Omega Value", &denominator, 0.0f, 100.0f, "%.1f");
 
-  // Display the actual numerical value for user convenience
-  float current_omega = 1.0f / std::pow(10.0f, denominator);
-  ImGui::Text("Current Omega: %.2e rad/s", (double) current_omega);
+  // Update the helper text to explain the Rossby Number logic
+  float max_vorticity = scale_max;  // Assuming scale_max tracks your current omega
+  ImGui::Text("Estimated Rossby Number: %.3f", (max_vorticity / (2.0 * denominator + 1e-6)));
 
   ImGui::Text("Time step :");
   ImGui::SliderFloat("dt", &dt, 0.f, 0.01f, "%.4f");
