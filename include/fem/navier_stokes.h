@@ -23,6 +23,8 @@ struct NavierStokesSolver
 
   bool inited;  // Initialization computes first residue and error
 
+  TArray<Vec3> velocity;  // Velocity field at vertices, calculated from psi
+
   size_t iter_max = 500;
   double tol      = 1e-6;
 
@@ -34,4 +36,5 @@ struct NavierStokesSolver
   void   time_step_coriolis(double dt, double nu, double omega_earth);
   void   time_step(double dt, double nu);
   void   compute_transport_coriolis(double* T, double omega_earth);
+  void   compute_velocity();  // Compute velocity field u = ∇⊥psi from stream function
 };

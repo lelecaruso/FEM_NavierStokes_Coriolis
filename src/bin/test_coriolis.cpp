@@ -18,13 +18,16 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
+#include <vector>
 
 /* Viewer config */
-float bgcolor[4]   = {0.3, 0.3, 0.3, 1.0};
+float bgcolor[4]   = {0.3f, 0.3f, 0.3f, 1.0f};
 bool  draw_surface = true;
 bool  draw_edges   = false;
 bool  show_axes    = false;  // NEW: Toggle for axis display (default off to avoid initial issues)
-float axis_length  = 1.5f;   // NEW: Length of axes
+bool  show_velocity_vectors = false;  // ADDED: Toggle for velocity
+float axis_length           = 1.5f;   // NEW: Length of axes
+float velocity_scale        = 0.1f;   // ADDED: Scale for arrows
 float scale_min;
 float scale_max;
 float mesh_deform = 0;
@@ -36,8 +39,8 @@ bool one_step  = false;
 bool reset     = false;
 
 /* Parameters */
-float  lognu       = -3.7;
-float  dt          = 0.002;
+float  lognu       = -3.7f;
+float  dt          = 0.002f;
 float  denominator = 20.0f;  // NEW denominator for RELEVANT angular velocity
 double tol         = 1e-6;
 
@@ -74,6 +77,62 @@ static void draw_axes(const Viewer& viewer);
 static void draw_axis_labels(const Viewer& viewer);
 static void cleanup_axes();
 
+// ADDED: Velocity rendering function
+static void draw_velocity_field(const Mesh&               mesh,
+                                const NavierStokesSolver& solver,
+                                const Viewer&             viewer,
+                                int                       shader)
+{
+  if (!show_velocity_vectors || solver.velocity.size == 0)
+    return;
+
+  std::vector<float> vd, cd;
+  for (size_t v = 0; v < mesh.vertex_count(); v++)
+  {
+    Vec3f p   = mesh.positions[v];
+    Vec3f vel = solver.velocity[v] * velocity_scale;
+
+    vd.push_back(p.x);
+    vd.push_back(p.y);
+    vd.push_back(p.z);
+    vd.push_back(p.x + vel.x);
+    vd.push_back(p.y + vel.y);
+    vd.push_back(p.z + vel.z);
+
+    for (int i = 0; i < 2; i++)
+    {
+      cd.push_back(1.0f);
+      cd.push_back(1.0f);
+      cd.push_back(1.0f);
+      cd.push_back(1.0f);
+    }
+  }
+
+  GLuint vao, vbo[2];
+  glGenVertexArrays(1, &vao);
+  glGenBuffers(2, vbo);
+  glBindVertexArray(vao);
+  glBindBuffer(GL_ARRAY_BUFFER, vbo[0]);
+  glBufferData(GL_ARRAY_BUFFER, vd.size() * 4, vd.data(), GL_STREAM_DRAW);
+  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, 0);
+  glEnableVertexAttribArray(0);
+  glBindBuffer(GL_ARRAY_BUFFER, vbo[1]);
+  glBufferData(GL_ARRAY_BUFFER, cd.size() * 4, cd.data(), GL_STREAM_DRAW);
+  glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 0, 0);
+  glEnableVertexAttribArray(1);
+
+  glUseProgram(shader);
+  glUniform1i(glGetUniformLocation(shader, "lighting"), 0);
+  Mat4 vm = viewer.camera.world_to_view(), proj = viewer.camera.view_to_clip();
+  glUniformMatrix4fv(glGetUniformLocation(shader, "vm"), 1, 0, &vm(0, 0));
+  glUniformMatrix4fv(glGetUniformLocation(shader, "proj"), 1, 0, &proj(0, 0));
+
+  glLineWidth(1.5f);
+  glDrawArrays(GL_LINES, 0, (GLsizei) vd.size() / 3);
+  glDeleteBuffers(2, vbo);
+  glDeleteVertexArrays(1, &vao);
+}
+
 void reset_solver(NavierStokesSolver& solver)
 {
   for (size_t i = 0; i < solver.N; ++i)
@@ -109,7 +168,7 @@ void transfer_to_mesh(const TArray<double>& V, Mesh& m)
   m.attr.resize(m.vertex_count());
   for (size_t i = 0; i < m.vertex_count(); ++i)
   {
-    m.attr[i] = V[i];
+    m.attr[i] = (float) V[i];
   }
 }
 
@@ -420,6 +479,9 @@ int main(int argc, char** argv)
     // Draw scene first
     draw_scene(viewer, shader, gpu_mesh);
 
+    // ADDED: Draw velocity
+    draw_velocity_field(mesh, solver, viewer, shader);
+
     // Draw axes on top
     draw_axes(viewer);
 
@@ -543,14 +605,17 @@ static void update_all(NavierStokesSolver& solver, Mesh& mesh, GPUMesh& gpu_mesh
     // NEW: Use the denominator directly as a linear scaling factor
     float omega_value = denominator;
 
-    solver.time_step_coriolis(dt, pow(10, lognu), (double) omega_value);
+    solver.time_step_coriolis(dt, pow(10, (double) lognu), (double) omega_value);
 
-    solver.time_step_coriolis(dt, pow(10, lognu), (double) omega_value);
+    solver.time_step_coriolis(dt, pow(10, (double) lognu), (double) omega_value);
 
     if (one_step)
     {
       one_step = false;
     }
+
+    // ADDED: Compute velocity field
+    solver.compute_velocity();
 
     transfer_to_mesh(solver.omega, mesh);
 
@@ -681,7 +746,7 @@ static void draw_gui(NavierStokesSolver& solver)
     reset = true;
   }
 
-  ImGui::Text("Time : %f", solver.t);
+  ImGui::Text("Time : %f", (float) solver.t);
   ImGui::Text("Scale min %.2f Scale max %.2f (Span : %g)",
               scale_min,
               scale_max,
@@ -709,6 +774,10 @@ static void draw_gui(NavierStokesSolver& solver)
   ImGui::Checkbox("Autoscale colors to bounds", &autoscale);
   ImGui::Checkbox("Show mesh edges", &draw_edges);
   ImGui::Checkbox("Show coordinate axes", &show_axes);  // NEW: Toggle for axes
+
+  // ADDED: Velocity controls
+  ImGui::Checkbox("Show velocity vectors", &show_velocity_vectors);
+  ImGui::SliderFloat("Velocity scale", &velocity_scale, 0.01f, 0.5f);
 
   ImGui::Text("Artificially deform mesh according to omega :");
   ImGui::Text("(may help visualize oscillations)");
