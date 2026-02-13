@@ -373,23 +373,50 @@ void NavierStokesSolver::time_step_coriolis(double dt, double nu, double omega_e
   t += dt;
 }
 
+// -----------------------------------------------------------------------------
+// Compute velocity field u from streamfunction psi on a triangular surface mesh
+// using P1 (linear) finite elements.
+//
+// Mathematical background:
+// On a surface with unit normal n, the velocity is defined as
+//
+//      u = n × ∇ψ
+//
+// where ψ is the streamfunction and ∇ψ is computed elementwise.
+//
+// For P1 FEM on a triangle T with vertices a,b,c:
+//
+//      ∇ψ|_T = psi[a] ∇φ_a + psi[b] ∇φ_b + psi[c] ∇φ_c
+//
+// and the gradients of basis functions are constant on T and given by
+//
+//      ∇φ_a = ( n × (C - B) ) / (2|T|)
+//      ∇φ_b = ( n × (A - C) ) / (2|T|)
+//      ∇φ_c = ( n × (B - A) ) / (2|T|)
+//
+// The resulting velocity is constant per triangle and then averaged to nodes
+// using mass lumping (area/3 per vertex).
+// -----------------------------------------------------------------------------
+
+// -----------------------------------------------------------------------------
+// Compute velocity field u from streamfunction psi on a triangular surface mesh
+// -----------------------------------------------------------------------------
 void NavierStokesSolver::compute_velocity()
 {
   // Compute velocity field as the perpendicular gradient of psi at VERTICES
   // u = ∇⊥ psi = normal × ∇psi (on the tangent plane)
   // Since psi is P1 Lagrange, compute by averaging gradient contributions from adjacent triangles
 
-  size_t vert_count = m.vertex_count();
-  velocity.resize(vert_count);
+  velocity.resize(N);
 
   // Initialize velocity to zero
-  for (size_t v = 0; v < vert_count; ++v)
+  for (size_t v = 0; v < N; ++v)
   {
     velocity[v] = Vec3::Zero;
   }
 
   // Accumulate gradient contributions from each triangle to its vertices
-  std::vector<double> vertex_weights(vert_count, 0.0);
+  std::vector<double> vertex_weights(N, 0.0);
 
   size_t tri_count = m.triangle_count();
   for (size_t t = 0; t < tri_count; ++t)
@@ -431,24 +458,11 @@ void NavierStokesSolver::compute_velocity()
     Vec3d CA      = A - C;  // Opposite to vertex b
     Vec3d AB_edge = B - A;  // Opposite to vertex c
 
-    // Project edge vectors onto tangent plane at triangle
-    auto project_to_tangent = [&](Vec3d e) -> Vec3d
-    {
-      double e_dot_n = e[0] * tri_normal[0] + e[1] * tri_normal[1] + e[2] * tri_normal[2];
-      return e - tri_normal * e_dot_n;
-    };
-
-    Vec3d BC_tan = project_to_tangent(BC);
-    Vec3d CA_tan = project_to_tangent(CA);
-    Vec3d AB_tan = project_to_tangent(AB_edge);
-
-    // For P1 basis: ∇φ_i is perpendicular to opposite edge (in tangent plane)
-    // Perpendicular in 3D: v⊥ = normal × v
-    auto perpendicular_tangent = [&](Vec3d e_tan) -> Vec3d { return cross(tri_normal, e_tan); };
-
-    Vec3d grad_phi_a = perpendicular_tangent(BC_tan) * factor;
-    Vec3d grad_phi_b = perpendicular_tangent(CA_tan) * factor;
-    Vec3d grad_phi_c = perpendicular_tangent(AB_tan) * factor;
+    // No projection needed: cross product directly gives the perpendicular gradient
+    // perpendicular_tangent(e) = tri_normal x e
+    Vec3d grad_phi_a = cross(tri_normal, BC) * factor;
+    Vec3d grad_phi_b = cross(tri_normal, CA) * factor;
+    Vec3d grad_phi_c = cross(tri_normal, AB_edge) * factor;
 
     // Weight by triangle area for averaging
     double area_weight = twice_area * 0.5;
@@ -472,7 +486,7 @@ void NavierStokesSolver::compute_velocity()
   }
 
   // Normalize by accumulated weight
-  for (size_t v = 0; v < vert_count; ++v)
+  for (size_t v = 0; v < N; ++v)
   {
     if (vertex_weights[v] > 1e-14)
     {
