@@ -373,7 +373,6 @@ void NavierStokesSolver::time_step_coriolis(double dt, double nu, double omega_e
   t += dt;
 }
 
-// -----------------------------------------------------------------------------
 // Compute velocity field u from streamfunction psi on a triangular surface mesh
 // using P1 (linear) finite elements.
 //
@@ -396,11 +395,8 @@ void NavierStokesSolver::time_step_coriolis(double dt, double nu, double omega_e
 //
 // The resulting velocity is constant per triangle and then averaged to nodes
 // using mass lumping (area/3 per vertex).
-// -----------------------------------------------------------------------------
 
-// -----------------------------------------------------------------------------
-// Compute velocity field u from streamfunction psi on a triangular surface mesh
-// -----------------------------------------------------------------------------
+// Compute velocity field u from streamfunction psi
 void NavierStokesSolver::compute_velocity()
 {
   // Compute velocity field as the perpendicular gradient of psi at VERTICES

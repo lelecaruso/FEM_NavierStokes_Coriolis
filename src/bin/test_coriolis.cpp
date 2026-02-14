@@ -39,7 +39,7 @@ bool one_step  = false;
 bool reset     = false;
 
 /* Parameters */
-float  lognu       = -3.7f;
+float  lognu       = -3.6f;
 float  dt          = 0.002f;
 float  denominator = 20.0f;  // NEW denominator for RELEVANT angular velocity
 double tol         = 1e-6;
@@ -77,7 +77,7 @@ static void draw_axes(const Viewer& viewer);
 static void draw_axis_labels(const Viewer& viewer);
 static void cleanup_axes();
 
-// ADDED: Velocity rendering function
+// NEW feature: Velocity rendering function
 static void draw_velocity_field(const Mesh&               mesh,
                                 const NavierStokesSolver& solver,
                                 const Viewer&             viewer,
@@ -598,11 +598,9 @@ static void update_all(NavierStokesSolver& solver, Mesh& mesh, GPUMesh& gpu_mesh
 
   if (started || one_step)
   {
-    // Calculate omega as 10^-denominator.
-    // If denominator = 4.13, we obtain the actual Earth angular velocity (~7.29e-5 rad/s).
-
     // OLD: float omega_value = 1.0f / pow(10.0f, denominator);
-    // NEW: Use the denominator directly as a linear scaling factor
+    // NEW ==> CORRECTION: Use the denominator directly as a linear scaling factor to have
+    // physically relevant values for the Coriolis parameter, which is more intuitive for users.
     float omega_value = denominator;
 
     solver.time_step_coriolis(dt, pow(10, (double) lognu), (double) omega_value);
@@ -614,7 +612,7 @@ static void update_all(NavierStokesSolver& solver, Mesh& mesh, GPUMesh& gpu_mesh
       one_step = false;
     }
 
-    // ADDED: Compute velocity field
+    // Compute velocity field to draw the vectors
     solver.compute_velocity();
 
     transfer_to_mesh(solver.omega, mesh);
