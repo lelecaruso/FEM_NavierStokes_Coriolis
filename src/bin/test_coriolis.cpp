@@ -605,8 +605,6 @@ static void update_all(NavierStokesSolver& solver, Mesh& mesh, GPUMesh& gpu_mesh
 
     solver.time_step_coriolis(dt, pow(10, (double) lognu), (double) omega_value);
 
-    solver.time_step_coriolis(dt, pow(10, (double) lognu), (double) omega_value);
-
     if (one_step)
     {
       one_step = false;
