@@ -449,7 +449,7 @@ void NavierStokesSolver::compute_velocity()
     // For P1 Lagrange elements, gradient is constant on the element.
     double factor = 1.0 / twice_area;
 
-    // Edge vectors in 3D
+    // Edge vectors
     Vec3d BC      = C - B;  // Opposite to vertex a
     Vec3d CA      = A - C;  // Opposite to vertex b
     Vec3d AB_edge = B - A;  // Opposite to vertex c
@@ -467,10 +467,23 @@ void NavierStokesSolver::compute_velocity()
     Vec3d grad_psi    = grad_phi_a * psi[a] + grad_phi_b * psi[b] + grad_phi_c * psi[c];
     Vec3d vel_contrib = cross(tri_normal, grad_psi);
 
-    // Cast to Vec3 (float) for accumulation
+    // vel_contrib = u_T = n_T × ∇ψ |_T
+    // Tangential velocity on triangle T obtained as the perpendicular gradient of psi on T
     Vec3 vel_contrib_f =
       Vec3{(float) vel_contrib[0], (float) vel_contrib[1], (float) vel_contrib[2]};
     float weight_f = (float) (area_weight / 3.0);
+
+    /*
+     * Mass lumping nodal averaging:
+     *
+     * For each vertex i,
+     *
+     *     u_i = ( Σ_{T ∋ i} (|T|/3) u_T ) / ( Σ_{T ∋ i} (|T|/3) )
+     *
+     *   - u_T = vel_contrib  (velocity constant on triangle T)
+     *   - |T|   = area_weight
+     *   - |T|/3 is distributed equally to the three vertices
+     */
 
     velocity[a] = velocity[a] + vel_contrib_f * weight_f;
     velocity[b] = velocity[b] + vel_contrib_f * weight_f;
@@ -481,7 +494,7 @@ void NavierStokesSolver::compute_velocity()
     vertex_weights[c] += area_weight / 3.0;
   }
 
-  // Normalize by accumulated weight
+  // Normalize by accumulated weight (division by Σ_{T ∋ i} |T|/3)
   for (size_t v = 0; v < N; ++v)
   {
     if (vertex_weights[v] > 1e-14)
