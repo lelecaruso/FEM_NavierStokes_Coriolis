@@ -175,7 +175,7 @@ void NavierStokesSolver::time_step(double dt, double nu)
   // compute PSI from OMEGA
   compute_stream_function();
   //  we ensure that PSI over the domain is zero too.
-  set_zero_mean(psi.data);
+  // set_zero_mean(psi.data);
 
   // compute transport term T(OMEGA, PSI)
   TArray<double> transport(N);
@@ -309,7 +309,7 @@ void NavierStokesSolver::time_step_coriolis(double dt, double nu, double omega_e
   // compute PSI from OMEGA
   compute_stream_function();
   //  we ensure that PSI over the domain is zero too.
-  set_zero_mean(psi.data);
+  // set_zero_mean(psi.data);
 
   // compute transport term T(OMEGA, PSI)
 
