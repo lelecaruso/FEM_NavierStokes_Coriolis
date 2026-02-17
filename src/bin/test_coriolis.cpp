@@ -509,6 +509,22 @@ int main(int argc, char** argv)
 
   return (EXIT_SUCCESS);
 }
+/*
+The algorithm operates on the piecewise linear discretization of $\psi$ over the triangular mesh.
+For a given contour value $C$, the intersection of the level set $\psi = C$ with each triangle $T$
+is computed as follows:
+\begin{itemize}
+    \item Each edge of the triangle is checked to see if $C$ lies between the values of $\psi$ at
+the two endpoints.
+    \item If an edge $(i, j)$ satisfies $\min(\psi_i, \psi_j) \le C \le \max(\psi_i, \psi_j)$, the
+intersection point $\mathbf{p}$ is determined via linear interpolation:
+    \begin{equation}
+    \mathbf{p} = \mathbf{x}_i + (\mathbf{x}_j - \mathbf{x}_i) \frac{C - \psi_i}{\psi_j - \psi_i}.
+    \end{equation}
+    \item For each triangle intersected by the level set, the resulting pair of points defines a
+line segment on the manifold surface.
+\end{itemize}
+*/
 
 // NEW: draw countours lines of psi
 static void draw_contours(const Mesh& mesh, const TArray<double>& data, int shader)
@@ -640,7 +656,6 @@ static void draw_contours(const Mesh& mesh, const TArray<double>& data, int shad
   glDeleteBuffers(1, &contour_col_vbo);
   glDeleteVertexArrays(1, &contour_vao);
 }
-
 static void syntax(char* prg_name)
 {
   printf("Syntax : %s ($(obj_filename)| cube | sphere) [n]\n", prg_name);
