@@ -26,6 +26,7 @@ bool  draw_surface = true;
 bool  draw_edges   = false;
 bool  show_axes    = false;  // NEW: Toggle for axis display (default off to avoid initial issues)
 bool  show_velocity_vectors = false;  // ADDED: Toggle for velocity
+bool  show_contours         = false;  // ADDED: Toggle for contour lines of psi
 float axis_length           = 1.5f;   // NEW: Length of axes
 float velocity_scale        = 0.1f;   // ADDED: Scale for arrows
 float scale_min;
@@ -67,6 +68,7 @@ static void rescale_and_recenter_mesh(Mesh& mesh);
 static void init_camera_for_mesh(const Mesh& mesh, Camera& camera);
 static void update_all(NavierStokesSolver& solver, Mesh& mesh, GPUMesh& mesh_gpu);
 static void draw_scene(const Viewer& viewer, int shader, const GPUMesh& gpu_mesh);
+static void draw_contours(const Mesh& mesh, const TArray<double>& data, int shader);
 static void draw_gui(NavierStokesSolver& solver);
 static void key_cb(int key, int action, int mods, void* args);
 static void get_attr_bounds(const Mesh& m, float* attr_min, float* attr_max);
@@ -479,6 +481,11 @@ int main(int argc, char** argv)
     // Draw scene first
     draw_scene(viewer, shader, gpu_mesh);
 
+    if (show_contours)
+    {
+      draw_contours(mesh, solver.psi, shader);
+    }
+
     // ADDED: Draw velocity
     draw_velocity_field(mesh, solver, viewer, shader);
 
@@ -501,6 +508,137 @@ int main(int argc, char** argv)
   log_fini();
 
   return (EXIT_SUCCESS);
+}
+
+// NEW: draw countours lines of psi
+static void draw_contours(const Mesh& mesh, const TArray<double>& data, int shader)
+{
+  if (!show_contours || data.size == 0)
+    return;
+
+  // Number of contour levels
+  int num_contours = 12;
+
+  // Find data min/max
+  double data_min = data[0];
+  double data_max = data[0];
+  for (size_t i = 0; i < data.size; ++i)
+  {
+    data_min = fmin(data_min, data[i]);
+    data_max = fmax(data_max, data[i]);
+  }
+  if (data_max <= data_min)
+    data_max = data_min + 1e-6;
+
+  // Build vertex data for contour lines
+  std::vector<float> vertex_data;
+  std::vector<float> color_data;
+
+  // For each triangle, check which contour levels it crosses
+  for (size_t t = 0; t < mesh.triangle_count(); ++t)
+  {
+    uint32_t a = mesh.indices[3 * t + 0];
+    uint32_t b = mesh.indices[3 * t + 1];
+    uint32_t c = mesh.indices[3 * t + 2];
+
+    double data_a = data[a];
+    double data_b = data[b];
+    double data_c = data[c];
+
+    Vec3f va = mesh.positions[a];
+    Vec3f vb = mesh.positions[b];
+    Vec3f vc = mesh.positions[c];
+
+    // For each contour level
+    for (int level = 0; level < num_contours; ++level)
+    {
+      double contour_value =
+        data_min + (level + 1.0) / (num_contours + 1.0) * (data_max - data_min);
+
+      // Find edges that cross this contour
+      std::vector<Vec3f> segment_points;
+
+      // Check edge AB
+      if ((data_a - contour_value) * (data_b - contour_value) < 0)
+      {
+        double t_param = (contour_value - data_a) / (data_b - data_a);
+        Vec3f  pt      = va + (vb - va) * (float) t_param;
+        segment_points.push_back(pt);
+      }
+      // Check edge BC
+      if ((data_b - contour_value) * (data_c - contour_value) < 0)
+      {
+        double t_param = (contour_value - data_b) / (data_c - data_b);
+        Vec3f  pt      = vb + (vc - vb) * (float) t_param;
+        segment_points.push_back(pt);
+      }
+      // Check edge CA
+      if ((data_c - contour_value) * (data_a - contour_value) < 0)
+      {
+        double t_param = (contour_value - data_c) / (data_a - data_c);
+        Vec3f  pt      = vc + (va - vc) * (float) t_param;
+        segment_points.push_back(pt);
+      }
+
+      // Draw line segment if we have exactly 2 intersection points
+      if (segment_points.size() == 2)
+      {
+        vertex_data.push_back(segment_points[0].x);
+        vertex_data.push_back(segment_points[0].y);
+        vertex_data.push_back(segment_points[0].z);
+        color_data.push_back(1.0f);  // White
+        color_data.push_back(1.0f);
+        color_data.push_back(1.0f);
+        color_data.push_back(1.0f);
+
+        vertex_data.push_back(segment_points[1].x);
+        vertex_data.push_back(segment_points[1].y);
+        vertex_data.push_back(segment_points[1].z);
+        color_data.push_back(1.0f);  // White
+        color_data.push_back(1.0f);
+        color_data.push_back(1.0f);
+        color_data.push_back(1.0f);
+      }
+    }
+  }
+
+  if (vertex_data.empty())
+    return;
+
+  // Create VAO and VBO
+  GLuint contour_vao, contour_vbo, contour_col_vbo;
+  glGenVertexArrays(1, &contour_vao);
+  glGenBuffers(1, &contour_vbo);
+  glGenBuffers(1, &contour_col_vbo);
+
+  glBindVertexArray(contour_vao);
+
+  // Position data
+  glBindBuffer(GL_ARRAY_BUFFER, contour_vbo);
+  glBufferData(GL_ARRAY_BUFFER,
+               vertex_data.size() * sizeof(float),
+               vertex_data.data(),
+               GL_DYNAMIC_DRAW);
+  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*) 0);
+  glEnableVertexAttribArray(0);
+
+  // Color data
+  glBindBuffer(GL_ARRAY_BUFFER, contour_col_vbo);
+  glBufferData(GL_ARRAY_BUFFER,
+               color_data.size() * sizeof(float),
+               color_data.data(),
+               GL_DYNAMIC_DRAW);
+  glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*) 0);
+  glEnableVertexAttribArray(1);
+
+  // Draw
+  glUseProgram(shader);
+  glDrawArrays(GL_LINES, 0, vertex_data.size() / 3);
+
+  // Cleanup
+  glDeleteBuffers(1, &contour_vbo);
+  glDeleteBuffers(1, &contour_col_vbo);
+  glDeleteVertexArrays(1, &contour_vao);
 }
 
 static void syntax(char* prg_name)
@@ -770,6 +908,8 @@ static void draw_gui(NavierStokesSolver& solver)
   ImGui::Checkbox("Autoscale colors to bounds", &autoscale);
   ImGui::Checkbox("Show mesh edges", &draw_edges);
   ImGui::Checkbox("Show coordinate axes", &show_axes);  // NEW: Toggle for axes
+
+  ImGui::Checkbox("Show contour lines", &show_contours);
 
   // ADDED: Velocity controls
   ImGui::Checkbox("Show velocity vectors", &show_velocity_vectors);
